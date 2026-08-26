@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────
+
+enum Role {
+  OWNER
+  MANAGER
+  SUPERVISOR
+  OPERATOR
+}
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  NIGHT
+}
+
+enum ShiftStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MachineStatus {
+  ACTIVE
+  IDLE
+  FAULT
+  MAINTENANCE
+}
+
+enum MaintenanceType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+enum AlertType {
+  LOW_PRODUCTION
+  HIGH_REJECTION
+  MACHINE_FAULT
+  MACHINE_IDLE
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+// ─── Models ──────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  factories        UserFactory[]
+  supervisedShifts Shift[]
+  productionLogs   Production[]
+  machineReports   MaintenanceLog[]
+  attendance       Attendance[]
+}
+
+model Factory {
+  id        String   @id @default(uuid())
+  name      String
+  location  String?
+  createdAt DateTime @default(now())
+
+  members       UserFactory[]
+  shifts        Shift[]
+  machines      Machine[]
+  notifications Notification[]
+  alertConfig   AlertConfig?
+  lines         ProductionLine[]
+}
+
+model UserFactory {
+  id        String   @id @default(uuid())
+  userId    String
+  factoryId String
+  role      Role
+  isActive  Boolean  @default(true)
+  joinedAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, factoryId])
+}
+
+model Shift {
+  id           String      @id @default(uuid())
+  factoryId    String
+  type         ShiftType
+  startTime    DateTime
+  endTime      DateTime?
+  supervisorId String
+  status       ShiftStatus @default(ACTIVE)
+  aiDigest     String?
+  createdAt    DateTime    @default(now())
+
+  factory    Factory      @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  supervisor User         @relation(fields: [supervisorId], references: [id])
+  production Production[]
+  attendance Attendance[]
+}
+
+model ProductionLine {
+  id        String @id @default(uuid())
+  name      String
+  factoryId String
+
+  factory    Factory      @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  production Production[]
+}
+
+model Production {
+  id            String   @id @default(uuid())
+  shiftId       String
+  lineId        String
+  supervisorId  String
+  targetUnits   Int
+  producedUnits Int
+  rejectedUnits Int      @default(0)
+  delayReason   String?
+  notes         String?
+  recordedAt    DateTime @default(now())
+
+  shift      Shift          @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  line       ProductionLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  supervisor User           @relation(fields: [supervisorId], references: [id])
+  defects    Defect[]
+}
+
+model Defect {
+  id           String   @id @default(uuid())
+  productionId String
+  count        Int
+  reason       String
+  description  String?
+  recordedAt   DateTime @default(now())
+
+  production Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+}
+
+model Machine {
+  id              String        @id @default(uuid())
+  factoryId       String
+  name            String
+  type            String
+  status          MachineStatus @default(ACTIVE)
+  installDate     DateTime?
+  lastMaintenance DateTime?
+  efficiencyPct   Float         @default(100)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  factory         Factory          @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  maintenanceLogs MaintenanceLog[]
+}
+
+model MaintenanceLog {
+  id               String          @id @default(uuid())
+  machineId        String
+  reportedBy       String
+  faultDescription String
+  downtimeStart    DateTime
+  downtimeEnd      DateTime?
+  resolvedBy       String?
+  maintenanceType  MaintenanceType @default(CORRECTIVE)
+  createdAt        DateTime        @default(now())
+
+  machine  Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  reporter User    @relation(fields: [reportedBy], references: [id])
+}
+
+model Attendance {
+  id       String           @id @default(uuid())
+  userId   String
+  shiftId  String
+  status   AttendanceStatus @default(PRESENT)
+  checkIn  DateTime?
+  checkOut DateTime?
+  markedBy String?
+  date     DateTime         @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shiftId])
+}
+
+model Notification {
+  id        String        @id @default(uuid())
+  factoryId String
+  type      AlertType
+  severity  AlertSeverity
+  message   String
+  isRead    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+}
+
+model AlertConfig {
+  id                     String  @id @default(uuid())
+  factoryId              String  @unique
+  productionThresholdPct Int     @default(80)
+  rejectionThresholdPct  Int     @default(5)
+  machineIdleMinutes     Int     @default(30)
+
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  factoryId   String
+  type        String
+  generatedBy String
+  dateFrom    DateTime
+  dateTo      DateTime
+  fileUrl     String?
+  createdAt   DateTime @default(now())
+}
