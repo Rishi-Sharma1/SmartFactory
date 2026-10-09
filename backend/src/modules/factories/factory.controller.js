@@ -11,13 +11,14 @@ export const getUserFactories = async (req, res, next) => {
 
 export const createFactory = async (req, res, next) => {
   try {
-    const { name, location } = req.body;
-    const factory = await factoryService.createFactory(req.user.sub, name, location);
+    const { name, location, lines } = req.body;
+    const factory = await factoryService.createFactory(req.user.sub, name, location, lines);
     res.status(201).json(factory);
   } catch (err) {
     next(err);
   }
 };
+
 
 export const updateFactory = async (req, res, next) => {
   try {
@@ -41,6 +42,22 @@ export const inviteMember = async (req, res, next) => {
   }
 };
 
+export const createMember = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, email, password, role } = req.body;
+    const membership = await factoryService.createFactoryMember(
+      id,
+      req.role,
+      { name, email, password, role }
+    );
+    res.status(201).json(membership);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 export const getFactoryMembers = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -55,7 +72,7 @@ export const updateMemberRole = async (req, res, next) => {
   try {
     const { id, userId } = req.params;
     const { role } = req.body;
-    const updated = await factoryService.updateMemberRole(id, userId, role);
+    const updated = await factoryService.updateMemberRole(id, req.role, userId, role);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -65,9 +82,21 @@ export const updateMemberRole = async (req, res, next) => {
 export const revokeMemberAccess = async (req, res, next) => {
   try {
     const { id, userId } = req.params;
-    await factoryService.revokeMemberAccess(id, userId);
+    await factoryService.revokeMemberAccess(id, req.role, userId);
     res.json({ message: 'Member access revoked successfully' });
   } catch (err) {
     next(err);
   }
 };
+
+
+export const deleteFactory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await factoryService.deleteFactory(id, req.user.sub);
+    res.json({ message: 'Factory deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+

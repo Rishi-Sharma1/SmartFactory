@@ -21,10 +21,24 @@ export const getDailyReport = async (factoryId, targetDateStr) => {
       recordedAt: { gte: startOfDay, lte: endOfDay },
     },
     include: { line: true },
+    orderBy: { recordedAt: 'desc' },
   });
 
   const totalProduced = productionLogs.reduce((a, b) => a + b.producedUnits, 0);
-  const totalTarget = productionLogs.reduce((a, b) => a + b.targetUnits, 0);
+
+  const dailyShiftLineTargets = new Map();
+  for (const log of productionLogs) {
+    const key = `${log.shiftId || 'none'}-${log.lineId}`;
+    if (log.targetUnits && log.targetUnits > 0) {
+      if (!dailyShiftLineTargets.has(key) || dailyShiftLineTargets.get(key) === 0) {
+        dailyShiftLineTargets.set(key, log.targetUnits);
+      }
+    } else if (!dailyShiftLineTargets.has(key)) {
+      dailyShiftLineTargets.set(key, 0);
+    }
+  }
+  const totalTarget = Array.from(dailyShiftLineTargets.values()).reduce((a, b) => a + b, 0);
+
   const totalRejected = productionLogs.reduce((a, b) => a + b.rejectedUnits, 0);
 
   const maintenanceLogs = await prisma.maintenanceLog.findMany({
@@ -58,10 +72,24 @@ export const getWeeklyReport = async (factoryId) => {
       recordedAt: { gte: startDate, lte: endDate },
     },
     include: { line: true },
+    orderBy: { recordedAt: 'desc' },
   });
 
   const totalProduced = productionLogs.reduce((a, b) => a + b.producedUnits, 0);
-  const totalTarget = productionLogs.reduce((a, b) => a + b.targetUnits, 0);
+
+  const weeklyShiftLineTargets = new Map();
+  for (const log of productionLogs) {
+    const key = `${log.shiftId || 'none'}-${log.lineId}`;
+    if (log.targetUnits && log.targetUnits > 0) {
+      if (!weeklyShiftLineTargets.has(key) || weeklyShiftLineTargets.get(key) === 0) {
+        weeklyShiftLineTargets.set(key, log.targetUnits);
+      }
+    } else if (!weeklyShiftLineTargets.has(key)) {
+      weeklyShiftLineTargets.set(key, 0);
+    }
+  }
+  const totalTarget = Array.from(weeklyShiftLineTargets.values()).reduce((a, b) => a + b, 0);
+
   const totalRejected = productionLogs.reduce((a, b) => a + b.rejectedUnits, 0);
 
   return {
@@ -71,6 +99,7 @@ export const getWeeklyReport = async (factoryId) => {
     totalRejected,
     efficiencyPct: totalTarget > 0 ? parseFloat(((totalProduced / totalTarget) * 100).toFixed(1)) : 0,
     productionLogsCount: productionLogs.length,
+    productionLogs,
   };
 };
 
@@ -89,7 +118,19 @@ export const getShiftReport = async (factoryId, shiftId) => {
   }
 
   const totalProduced = shift.production.reduce((a, b) => a + b.producedUnits, 0);
-  const totalTarget = shift.production.reduce((a, b) => a + b.targetUnits, 0);
+
+  const shiftLineTargets = new Map();
+  for (const log of shift.production) {
+    if (log.targetUnits && log.targetUnits > 0) {
+      if (!shiftLineTargets.has(log.lineId) || shiftLineTargets.get(log.lineId) === 0) {
+        shiftLineTargets.set(log.lineId, log.targetUnits);
+      }
+    } else if (!shiftLineTargets.has(log.lineId)) {
+      shiftLineTargets.set(log.lineId, 0);
+    }
+  }
+  const totalTarget = Array.from(shiftLineTargets.values()).reduce((a, b) => a + b, 0);
+
   const totalRejected = shift.production.reduce((a, b) => a + b.rejectedUnits, 0);
 
   return {

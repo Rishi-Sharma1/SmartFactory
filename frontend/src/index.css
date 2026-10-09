@@ -1,0 +1,59 @@
+@import './App.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #f8f9fb;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f1f5f9;
+  --border: #e2e8f0;
+  --border-muted: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --status-emerald: #059669;
+  --status-emerald-bg: #ecfdf5;
+  --status-emerald-border: #a7f3d0;
+  --status-amber: #d97706;
+  --status-amber-bg: #fffbeb;
+  --status-amber-border: #fde68a;
+  --status-red: #dc2626;
+  --status-red-bg: #fef2f2;
+  --status-red-border: #fecaca;
+  --status-blue: #2563eb;
+  --status-blue-bg: #eff6ff;
+  --status-blue-border: #bfdbfe;
+}
+
+.dark {
+  --bg-primary: #020617;
+  --bg-surface: #0f172a;
+  --bg-surface-elevated: #090d16;
+  --border: #1e293b;
+  --border-muted: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --status-emerald: #34d399;
+  --status-emerald-bg: rgba(6, 78, 59, 0.4);
+  --status-emerald-border: rgba(6, 95, 70, 0.8);
+  --status-amber: #fbbf24;
+  --status-amber-bg: rgba(120, 53, 15, 0.4);
+  --status-amber-border: rgba(146, 64, 14, 0.8);
+  --status-red: #f87171;
+  --status-red-bg: rgba(127, 29, 29, 0.4);
+  --status-red-border: rgba(153, 27, 27, 0.8);
+  --status-blue: #60a5fa;
+  --status-blue-bg: rgba(30, 58, 138, 0.4);
+  --status-blue-border: rgba(30, 64, 175, 0.8);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}

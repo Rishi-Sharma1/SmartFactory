@@ -22,9 +22,10 @@ export const selfCheckOut = async (req, res, next) => {
 
 export const markAttendance = async (req, res, next) => {
   try {
-    const { userId, shiftId, status } = req.body;
+    const targetId = req.body.userId || req.params.id;
+    const { shiftId, status } = req.body;
     const result = await attendanceService.markAttendance(
-      userId,
+      targetId,
       shiftId,
       status,
       req.user.sub,
@@ -41,6 +42,41 @@ export const getShiftAttendance = async (req, res, next) => {
     const { shiftId } = req.params;
     const roster = await attendanceService.getShiftAttendance(shiftId, req.factoryId);
     res.json(roster);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const addLabour = async (req, res, next) => {
+  try {
+    const worker = await attendanceService.addLabourToRoster(
+      req.body,
+      req.user.sub,
+      req.factoryId
+    );
+    res.status(201).json(worker);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getDailyRegisters = async (req, res, next) => {
+  try {
+    const registers = await attendanceService.getDailyRegisters(req.factoryId);
+    res.json(registers);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const saveDailySheet = async (req, res, next) => {
+  try {
+    const result = await attendanceService.saveDailySheet(
+      req.body,
+      req.user.sub,
+      req.factoryId
+    );
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

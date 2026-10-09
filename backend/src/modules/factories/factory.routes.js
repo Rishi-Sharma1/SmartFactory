@@ -7,6 +7,7 @@ import {
   createFactorySchema,
   inviteMemberSchema,
   updateMemberRoleSchema,
+  createMemberSchema,
 } from './factory.schema.js';
 
 const router = express.Router();
@@ -19,9 +20,14 @@ router.post('/', validate(createFactorySchema), factoryController.createFactory)
 
 // Specific factory operations (Owner guarded)
 router.put('/:id', resolveFactoryContext, requireRole('OWNER'), factoryController.updateFactory);
+router.delete('/:id', resolveFactoryContext, requireRole('OWNER'), factoryController.deleteFactory);
 router.post('/:id/invite', resolveFactoryContext, requireRole('OWNER'), validate(inviteMemberSchema), factoryController.inviteMember);
+
+// Member management (Owner and Manager accessible according to hierarchy)
 router.get('/:id/members', resolveFactoryContext, requireRole('OWNER', 'MANAGER'), factoryController.getFactoryMembers);
-router.put('/:id/members/:userId', resolveFactoryContext, requireRole('OWNER'), validate(updateMemberRoleSchema), factoryController.updateMemberRole);
-router.delete('/:id/members/:userId', resolveFactoryContext, requireRole('OWNER'), factoryController.revokeMemberAccess);
+router.post('/:id/members', resolveFactoryContext, requireRole('OWNER', 'MANAGER'), validate(createMemberSchema), factoryController.createMember);
+router.put('/:id/members/:userId', resolveFactoryContext, requireRole('OWNER', 'MANAGER'), validate(updateMemberRoleSchema), factoryController.updateMemberRole);
+router.delete('/:id/members/:userId', resolveFactoryContext, requireRole('OWNER', 'MANAGER'), factoryController.revokeMemberAccess);
 
 export default router;
+

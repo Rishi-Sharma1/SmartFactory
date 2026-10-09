@@ -32,7 +32,7 @@ export const updateStatus = async (req, res, next) => {
 export const logFault = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { faultDescription } = req.body;
+    const faultDescription = (req.body.faultDescription || req.body.description || '').trim();
     const log = await machineService.logFault(id, req.user.sub, faultDescription, req.factoryId);
     res.status(201).json(log);
   } catch (err) {

@@ -88,6 +88,8 @@ model Factory {
   notifications Notification[]
   alertConfig   AlertConfig?
   lines         ProductionLine[]
+  sensorReadings SensorReading[]
+  sensorRollups  SensorReadingRollup[]
 }
 
 model UserFactory {
@@ -128,6 +130,7 @@ model ProductionLine {
 
   factory    Factory      @relation(fields: [factoryId], references: [id], onDelete: Cascade)
   production Production[]
+  machines   Machine[]
 }
 
 model Production {
@@ -162,6 +165,7 @@ model Defect {
 model Machine {
   id              String        @id @default(uuid())
   factoryId       String
+  lineId          String?
   name            String
   type            String
   status          MachineStatus @default(ACTIVE)
@@ -172,7 +176,10 @@ model Machine {
   updatedAt       DateTime      @updatedAt
 
   factory         Factory          @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  line            ProductionLine?  @relation(fields: [lineId], references: [id], onDelete: SetNull)
   maintenanceLogs MaintenanceLog[]
+  sensorReadings  SensorReading[]
+  sensorRollups   SensorReadingRollup[]
 }
 
 model MaintenanceLog {
@@ -224,8 +231,51 @@ model AlertConfig {
   productionThresholdPct Int     @default(80)
   rejectionThresholdPct  Int     @default(5)
   machineIdleMinutes     Int     @default(30)
+  tempMaxThreshold       Float   @default(85.0)
+  vibMaxThreshold        Float   @default(5.0)
+  rpmMinThreshold        Float   @default(800.0)
+  rpmMaxThreshold        Float   @default(3000.0)
+  alertCooldownMinutes   Int     @default(10)
 
   factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+}
+
+model SensorReading {
+  id          String   @id @default(uuid())
+  machineId   String
+  factoryId   String
+  temperature Float
+  vibration   Float
+  rpm         Float
+  timestamp   DateTime @default(now())
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  @@index([machineId, timestamp])
+  @@index([factoryId, timestamp])
+}
+
+model SensorReadingRollup {
+  id        String   @id @default(uuid())
+  machineId String
+  factoryId String
+  bucket    DateTime
+  tempAvg   Float
+  tempMin   Float
+  tempMax   Float
+  vibAvg    Float
+  vibMin    Float
+  vibMax    Float
+  rpmAvg    Float
+  rpmMin    Float
+  rpmMax    Float
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  @@unique([machineId, bucket])
+  @@index([factoryId, bucket])
 }
 
 model Report {

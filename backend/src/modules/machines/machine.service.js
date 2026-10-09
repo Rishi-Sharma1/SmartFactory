@@ -3,7 +3,7 @@ import { emitToFactory } from '../../config/socket.js';
 import { checkMachineAlerts } from '../alerts/alert.engine.js';
 
 export const getMachines = async (factoryId) => {
-  return prisma.machine.findMany({
+  let machines = await prisma.machine.findMany({
     where: { factoryId },
     include: {
       maintenanceLogs: {
@@ -14,13 +14,49 @@ export const getMachines = async (factoryId) => {
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  if (machines.length === 0) {
+    let line = await prisma.productionLine.findFirst({ where: { factoryId } });
+    if (!line) {
+      line = await prisma.productionLine.create({
+        data: { name: 'Production Line 1', factoryId },
+      });
+    }
+
+    await prisma.machine.create({
+      data: {
+        factoryId,
+        lineId: line.id,
+        name: 'CNC Milling Unit 01',
+        type: 'CNC Milling',
+        status: 'ACTIVE',
+        efficiencyPct: 100,
+      },
+    });
+
+    machines = await prisma.machine.findMany({
+      where: { factoryId },
+      include: {
+        maintenanceLogs: {
+          take: 3,
+          orderBy: { createdAt: 'desc' },
+          include: { reporter: { select: { name: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  return machines;
 };
 
+
 export const createMachine = async (data, factoryId) => {
-  const { name, type, installDate } = data;
+  const { name, type, lineId, installDate } = data;
   return prisma.machine.create({
     data: {
       factoryId,
+      lineId: lineId || null,
       name,
       type,
       installDate: installDate ? new Date(installDate) : null,
@@ -30,8 +66,17 @@ export const createMachine = async (data, factoryId) => {
   });
 };
 
+
 export const updateStatus = async (machineId, status, efficiencyPct, factoryId) => {
-  const machine = await prisma.machine.update({
+  const machine = await prisma.machine.findFirst({
+    where: { id: machineId, factoryId },
+  });
+
+  if (!machine) {
+    throw { statusCode: 404, message: 'Machine not found in this factory' };
+  }
+
+  const updatedMachine = await prisma.machine.update({
     where: { id: machineId },
     data: {
       status,
@@ -40,14 +85,34 @@ export const updateStatus = async (machineId, status, efficiencyPct, factoryId) 
   });
 
   if (status === 'IDLE') {
-    checkMachineAlerts(machine, 'MACHINE_IDLE', 'Status changed to IDLE', factoryId);
+    checkMachineAlerts(updatedMachine, 'MACHINE_IDLE', 'Status changed to IDLE', factoryId);
   }
 
-  return machine;
+  if (status === 'ACTIVE') {
+    await prisma.notification.updateMany({
+      where: {
+        factoryId,
+        type: 'MACHINE_FAULT',
+        isRead: false,
+        message: { contains: updatedMachine.name },
+      },
+      data: { isRead: true },
+    });
+  }
+
+  return updatedMachine;
 };
 
 export const logFault = async (machineId, reportedByUserId, faultDescription, factoryId) => {
-  const machine = await prisma.machine.update({
+  const machine = await prisma.machine.findFirst({
+    where: { id: machineId, factoryId },
+  });
+
+  if (!machine) {
+    throw { statusCode: 404, message: 'Machine not found in this factory' };
+  }
+
+  const updatedMachine = await prisma.machine.update({
     where: { id: machineId },
     data: { status: 'FAULT' },
   });
@@ -60,23 +125,37 @@ export const logFault = async (machineId, reportedByUserId, faultDescription, fa
       downtimeStart: new Date(),
       maintenanceType: 'CORRECTIVE',
     },
-    include: { reporter: { select: { id: true, name: true } } },
+    include: {
+      reporter: { select: { id: true, name: true } },
+      machine: { select: { id: true, name: true, status: true } },
+    },
   });
 
   emitToFactory(factoryId, 'machine:fault', {
-    machineId: machine.id,
-    name: machine.name,
+    machineId: updatedMachine.id,
+    name: updatedMachine.name,
     description: faultDescription,
     severity: 'CRITICAL',
-    reportedBy: log.reporter.name,
+    reportedBy: log.reporter?.name || 'Operator',
   });
 
-  checkMachineAlerts(machine, 'MACHINE_FAULT', faultDescription, factoryId);
+  checkMachineAlerts(updatedMachine, 'MACHINE_FAULT', faultDescription, factoryId);
 
-  return log;
+  return {
+    ...log,
+    name: updatedMachine.name,
+  };
 };
 
 export const resolveFault = async (machineId, resolvedByUserId, factoryId) => {
+  const machine = await prisma.machine.findFirst({
+    where: { id: machineId, factoryId },
+  });
+
+  if (!machine) {
+    throw { statusCode: 404, message: 'Machine not found in this factory' };
+  }
+
   const openLog = await prisma.maintenanceLog.findFirst({
     where: { machineId, downtimeEnd: null },
     orderBy: { downtimeStart: 'desc' },
@@ -104,6 +183,17 @@ export const resolveFault = async (machineId, resolvedByUserId, factoryId) => {
     },
   });
 
+  // Automatically mark any active MACHINE_FAULT notifications for this machine as read
+  await prisma.notification.updateMany({
+    where: {
+      factoryId,
+      type: 'MACHINE_FAULT',
+      isRead: false,
+      message: { contains: updatedMachine.name },
+    },
+    data: { isRead: true },
+  });
+
   emitToFactory(factoryId, 'machine:resolved', {
     machineId: updatedMachine.id,
     name: updatedMachine.name,
@@ -113,10 +203,21 @@ export const resolveFault = async (machineId, resolvedByUserId, factoryId) => {
   return updatedMachine;
 };
 
-export const getMachineLogs = async (machineId) => {
+export const getMachineLogs = async (machineId, factoryId) => {
+  if (factoryId) {
+    const machine = await prisma.machine.findFirst({
+      where: { id: machineId, factoryId },
+    });
+
+    if (!machine) {
+      throw { statusCode: 404, message: 'Machine not found in this factory' };
+    }
+  }
+
   return prisma.maintenanceLog.findMany({
     where: { machineId },
     include: { reporter: { select: { name: true, email: true } } },
     orderBy: { createdAt: 'desc' },
   });
 };
+

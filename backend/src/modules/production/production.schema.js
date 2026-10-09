@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const updateProductionSchema = z.object({
   body: z.object({
-    shiftId: z.string().uuid('Valid shiftId required'),
+    shiftId: z.string().uuid('Valid shiftId required').optional(),
     lineId: z.string().min(1, 'lineId required'),
     producedUnits: z.number().int().min(0, 'producedUnits must be non-negative'),
     rejectedUnits: z.number().int().min(0, 'rejectedUnits must be non-negative').default(0),
@@ -23,8 +23,9 @@ export const updateProductionSchema = z.object({
 
 export const setProductionTargetSchema = z.object({
   body: z.object({
-    shiftId: z.string().uuid(),
-    lineId: z.string(),
+    shiftId: z.string().uuid().optional(),
+    shiftType: z.string().optional(),
+    lineId: z.string().min(1, 'lineId required'),
     targetUnits: z.number().int().min(1, 'targetUnits must be at least 1'),
   }),
 });

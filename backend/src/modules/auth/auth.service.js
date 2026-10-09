@@ -126,3 +126,95 @@ export const getMe = async (userId) => {
 
   return user;
 };
+
+export const register = async (data) => {
+  const { name, email, password, role = 'OWNER', factories = [] } = data;
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    throw { statusCode: 400, message: 'User with this email already exists' };
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  const user = await prisma.user.create({
+    data: {
+      name,
+      email,
+      passwordHash,
+    },
+  });
+
+  for (const factoryData of factories) {
+    const createdFactory = await prisma.factory.create({
+      data: {
+        name: factoryData.name,
+        location: factoryData.location || null,
+        members: {
+          create: {
+            userId: user.id,
+            role,
+          },
+        },
+        alertConfig: {
+          create: {
+            productionThresholdPct: 80,
+            rejectionThresholdPct: 5,
+            machineIdleMinutes: 30,
+          },
+        },
+      },
+    });
+
+    if (Array.isArray(factoryData.lines) && factoryData.lines.length > 0) {
+      for (const lineEntry of factoryData.lines) {
+        const lineName = typeof lineEntry === 'string' ? lineEntry : lineEntry?.name;
+        if (lineName && lineName.trim()) {
+          const createdLine = await prisma.productionLine.create({
+            data: {
+              name: lineName.trim(),
+              factoryId: createdFactory.id,
+            },
+          });
+
+          if (lineEntry && typeof lineEntry === 'object' && Array.isArray(lineEntry.machines)) {
+            for (const m of lineEntry.machines) {
+              if (m.name && m.name.trim()) {
+                await prisma.machine.create({
+                  data: {
+                    factoryId: createdFactory.id,
+                    lineId: createdLine.id,
+                    name: m.name.trim(),
+                    type: m.type || 'General Equipment',
+                    status: m.status || 'ACTIVE',
+                    efficiencyPct: m.efficiencyPct ?? 100,
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (Array.isArray(factoryData.machines) && factoryData.machines.length > 0) {
+      for (const m of factoryData.machines) {
+        if (m.name && m.name.trim()) {
+          await prisma.machine.create({
+            data: {
+              factoryId: createdFactory.id,
+              name: m.name.trim(),
+              type: m.type || 'General Equipment',
+              status: m.status || 'ACTIVE',
+              efficiencyPct: m.efficiencyPct ?? 100,
+            },
+          });
+        }
+      }
+    }
+
+  }
+
+  return login(email, password);
+};
+

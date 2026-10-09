@@ -11,10 +11,12 @@ export const openShift = async (type, supervisorId, factoryId) => {
     throw { statusCode: 400, message: `Active shift (${existingActive.type}) is already running` };
   }
 
+  const shiftType = (type || 'MORNING').toUpperCase();
+
   const shift = await prisma.shift.create({
     data: {
       factoryId,
-      type,
+      type: shiftType,
       supervisorId,
       startTime: new Date(),
       status: 'ACTIVE',
@@ -27,7 +29,7 @@ export const openShift = async (type, supervisorId, factoryId) => {
   emitToFactory(factoryId, 'shift:started', {
     shiftId: shift.id,
     type: shift.type,
-    supervisorName: shift.supervisor.name,
+    supervisorName: shift.supervisor?.name || 'Supervisor',
     startTime: shift.startTime,
   });
 
@@ -35,12 +37,20 @@ export const openShift = async (type, supervisorId, factoryId) => {
 };
 
 export const closeShift = async (shiftId, factoryId) => {
+  let whereClause;
+  if (!shiftId || shiftId === 'active' || shiftId === 'current') {
+    whereClause = { factoryId, status: 'ACTIVE' };
+  } else {
+    whereClause = { id: shiftId, factoryId, status: 'ACTIVE' };
+  }
+
   const shift = await prisma.shift.findFirst({
-    where: { id: shiftId, factoryId, status: 'ACTIVE' },
+    where: whereClause,
     include: {
       supervisor: true,
       production: true,
     },
+    orderBy: { createdAt: 'desc' },
   });
 
   if (!shift) {
@@ -49,7 +59,19 @@ export const closeShift = async (shiftId, factoryId) => {
 
   const endTime = new Date();
   const totalProduced = shift.production.reduce((acc, curr) => acc + curr.producedUnits, 0);
-  const totalTarget = shift.production.reduce((acc, curr) => acc + curr.targetUnits, 0);
+
+  const lineTargets = new Map();
+  for (const log of shift.production) {
+    if (log.targetUnits && log.targetUnits > 0) {
+      if (!lineTargets.has(log.lineId) || lineTargets.get(log.lineId) === 0) {
+        lineTargets.set(log.lineId, log.targetUnits);
+      }
+    } else if (!lineTargets.has(log.lineId)) {
+      lineTargets.set(log.lineId, 0);
+    }
+  }
+  const totalTarget = Array.from(lineTargets.values()).reduce((sum, val) => sum + val, 0);
+
   const totalRejected = shift.production.reduce((acc, curr) => acc + curr.rejectedUnits, 0);
   const efficiencyPct = totalTarget > 0 ? parseFloat(((totalProduced / totalTarget) * 100).toFixed(1)) : 0;
 

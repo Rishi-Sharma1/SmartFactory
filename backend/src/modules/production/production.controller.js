@@ -15,8 +15,17 @@ export const updateProduction = async (req, res, next) => {
 
 export const setTarget = async (req, res, next) => {
   try {
-    const result = await productionService.setTarget(req.body, req.factoryId);
+    const result = await productionService.setTarget(req.body, req.factoryId, req.user.sub);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getLines = async (req, res, next) => {
+  try {
+    const lines = await productionService.getProductionLines(req.factoryId);
+    res.json(lines);
   } catch (err) {
     next(err);
   }
@@ -40,3 +49,14 @@ export const getSummary = async (req, res, next) => {
     next(err);
   }
 };
+
+export const createLine = async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const line = await productionService.createProductionLine(req.factoryId, name);
+    res.status(201).json(line);
+  } catch (err) {
+    next(err);
+  }
+};
+
